@@ -1,0 +1,246 @@
+---
+title: "Stats Research Summer 2024"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2024-05-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/Mussa/Dropbox/Summer2024Research")
+library(tidyverse)
+library(readr)
+
+```
+
+## Motivation
+
+The motivation of the project is to understand the different perspectives of these three different projects (CCLE, genomics of drug sensitivity in cancer, Cancer Therapeutics Response Portal) working on cell lines, as they measure different variables or components that are read from the cell line patients.
+
+Project Summaries
+Cancer Cell Line Encyclopedia (CCLE)
+The Cancer Cell Line Encyclopedia (CCLE) project aims to characterize the genetic and pharmacologic profiles of a large panel of human cancer cell lines to develop predictive models for cancer drug sensitivity. It provides a comprehensive dataset, including gene expression, copy number, and mutation data, for over 1,000 cancer cell lines.
+
+
+<br>
+
+## CSV files
+
+Lets review the observed files from the Depmap portal
+
+#### sampple_info19Q3.csv  
+sample_info.csv: This file contains metadata about cell lines in the CCLE project. It includes information such as cell line names, aliases, COSMIC IDs, sex, source, sample collection site, primary disease, subtype, age, Sanger Model ID, lineage, and various other details. Each row represents a unique cell line, and the primary key is depmap_id (Cancer cell line primary key).
+<br>
+
+```{r , Rep1-chunck}
+sample_info_data <- read_csv("sample_info19Q3.csv")
+head(sample_info_data %>% 
+  select(1:8)
+)
+
+
+# Remove unnecessary columns: alias, aditional info
+sample_info_data <- sample_info_data %>% 
+  select(-alias)
+
+sample_info_data <- sample_info_data %>% 
+  select(-additional_info) 
+
+
+str(sample_info_data)
+
+```
+
+#### CCLE_expression19Q3.csv
+
+```{r}
+CCLE_exp_data <- read_csv("CCLE_expression19Q3.csv")
+
+head(CCLE_exp_data %>% 
+  select(1:100)
+)
+
+
+# reduced dataset in order to compile easier
+CCLE_exp_redc <- CCLE_exp_data %>% 
+  select(1:200)
+
+
+```
+
+##Joining tables
+
+```{r}
+
+
+CCLE_exp_data <- CCLE_exp_data %>% 
+  rename("DepMap_ID" = 1)
+
+full_integrated <- sample_info_data %>% 
+  left_join(CCLE_exp_redc, by = "DepMap_ID") 
+
+#view(full_integrated %>% 
+#       select(1:70))
+
+#Tests
+
+    sam_tst <- head(sample_info_data %>%
+                      select(1:10))
+    exp_tst <- head(CCLE_exp_data %>%
+                      select(1:10))
+    
+    integrated_tst <- sam_tst %>% 
+      left_join(exp_tst, by = "DepMap_ID")
+  
+#view(integrated_tst)
+
+ 
+       
+#. Testing joined table on "ACH-000005" : "BAD (572)" 
+
+#view(full_integrated %>% 
+#       filter(DepMap_ID == "ACH-000005") %>% 
+#       select("BAD (572)" | "DepMap_ID")) 
+
+#view(CCLE_exp_data %>% 
+#       filter(DepMap_ID == "ACH-000005") %>% 
+#       select("BAD (572)" | "DepMap_ID")) # both resulted in the same value
+
+    
+```
+
+
+## Data Visualizations 
+
+
+#### Disease Distribution
+
+```{r}
+library("networkD3")
+
+data <- sample_info_data %>%
+  select(disease, culture_type, primary_or_metastasis, lineage) %>%
+  na.omit()
+
+create_links <- function(data, columns) {
+  links <- list()
+  for (i in 1:(length(columns) - 1)) {
+    temp_links <- data %>%
+      group_by(!!sym(columns[i]), !!sym(columns[i + 1])) %>%
+      summarise(value = n()) %>%
+      ungroup() %>%
+      rename(source = !!sym(columns[i]), target = !!sym(columns[i + 1]))
+    links[[i]] <- temp_links
+  }
+  bind_rows(links)
+}
+
+# Create links
+columns <- c("disease", "culture_type", "primary_or_metastasis", "lineage")
+links <- create_links(data, columns)
+
+# Create nodes data frame
+nodes <- data.frame(name = unique(c(links$source, links$target)))
+
+# Add node IDs to links data frame
+links$IDsource <- match(links$source, nodes$name) - 1
+links$IDtarget <- match(links$target, nodes$name) - 1
+
+# Plot the Sankey diagram
+sankeyNetwork(Links = links, Nodes = nodes,
+              Source = "IDsource", Target = "IDtarget",
+              Value = "value", NodeID = "name",
+              sinksRight = FALSE, fontSize = 12, nodeWidth = 30)
+
+
+```
+
+
+#### Age & Sex
+
+```{r}
+
+ggplot(sample_info_data, aes(x = sex, y = age, fill = sex)) +
+  geom_violin(trim = TRUE) +
+  geom_boxplot(width = 0.1, fill = "grey") +
+  theme_minimal() +
+  labs(title = "Age Distribution by Sex",
+       x = "Sex",
+       y = "Age") +
+  scale_fill_brewer(palette = "Pastel1") +
+  theme(legend.position = "none")
+
+
+```
+
+## Missing Rates
+
+```{r}
+
+fltrd_sample_info_data <- sample_info_data %>% 
+  select("sex", "age", "cas9_activity", "disease", "disease_subtype", "lineage", "lineage_subtype", "lineage_sub_subtype", "source", "culture_type", "sample_collection_site", "primary_or_metastasis")
+
+missing_rate <- fltrd_sample_info_data %>%
+  summarise(across(everything(), ~mean(is.na(.)))) %>%
+  pivot_longer(cols = everything(), names_to = "column", values_to = "missing_rate")
+
+# Add a column for the percentage labels
+missing_rate <- missing_rate %>%
+  mutate(percentage = missing_rate * 100)
+
+# Plot the missing rate as a pie chart
+ggplot(missing_rate, aes(x = "", y = missing_rate, fill = column)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +
+  labs(title = "Missing Rate by Column",
+       fill = "Column") +
+  theme_void() +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")),
+            position = position_stack(vjust = 0.5)) +
+  theme(legend.position = "right")
+
+
+```
+
+
+## Imputing Missing Values
+
+```{r}
+library("class")
+
+
+numeric_columns <- full_integrated %>%
+  select(where(is.numeric))
+
+# Split the data into training (non-NA) and testing (NA) sets
+train_data <- numeric_columns %>%
+  filter(complete.cases(.))
+test_data <- numeric_columns %>%
+  filter(!complete.cases(.))
+
+
+# Standardize the training and test sets
+train_scaled <- scale(train_data)
+test_scaled <- scale(test_data, center = attr(train_scaled, "scaled:center"), scale = attr(train_scaled, "scaled:scale"))
+
+
+
+imputed_values <- knn(train_scaled, test_scaled, cl = NULL, k = 5)
+
+imputed_data <- test_data
+imputed_data[is.na(test_data)] <- imputed_values
+
+numeric_columns[!complete.cases(numeric_columns)] <- imputed_data
+merged_data_imputed <- full_integrated %>%
+  select(-all_of(names(numeric_columns))) %>%
+  bind_cols(numeric_columns)
+
+
+summary(merged_data_imputed)
+
+
+
+```
+

@@ -1,0 +1,29 @@
+---
+title: "CCLE_Null_Values"
+output:
+  html_document:
+    df_print: paged
+date: "2024-12-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readr)
+
+models <- read_csv("Model.csv")
+modelCondition <- read_csv("ModelCondition.csv")
+expressions <- read_csv("OmicsExpressionProteinCodingGenesTPMLogp1.csv")
+crispr <- read_csv("CRISPRGeneEffect (2).csv")
+CN <- read_csv("OmicsCNGene.csv")
+mutations <- read_csv("OmicsSomaticMutations (1).csv")
+geneDependency <- read_csv("ScreenGeneDependency.csv")
+
+```
+
+
+
+```{r}
+head(modelCondition)
+```
